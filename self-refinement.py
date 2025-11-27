@@ -12,7 +12,7 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 from transformers import (
-    LlavaForConditionalGeneration,
+    Qwen2VLForConditionalGeneration,
     AutoProcessor,
     AutoTokenizer
 )
@@ -153,53 +153,69 @@ class UncertaintyAnalyzer:
         
         return float(normalized_entropy)
     
+
+
     def _compute_attention_dispersion(
-        self,
-        image: Image.Image,
-        question: str
-    ) -> float:
-        """
-        Measure dispersion of cross-modal attention weights
-        
-        High dispersion = model not focused on specific regions
-        → likely uncertain or hallucinating
-        """
-        try:
-            inputs = self.processor(
-                text=question,
-                images=image,
-                return_tensors="pt"
-            ).to(self.device)
-            
-            with torch.no_grad():
-                outputs = self.model(**inputs, output_attentions=True)
-            
-            # Extract cross-attention from last layer
-            if hasattr(outputs, 'cross_attentions') and outputs.cross_attentions:
-                cross_attention = outputs.cross_attentions[-1]
-                # Shape: [batch, num_heads, seq_len, num_patches]
-                
-                # Average over heads and sequence
-                attention_weights = cross_attention.mean(dim=1).mean(dim=1)
-                
-                # Calculate entropy of attention distribution
-                attention_weights = attention_weights.flatten()
-                attention_probs = F.softmax(attention_weights, dim=-1)
-                attention_entropy = -torch.sum(
-                    attention_probs * torch.log(attention_probs.clamp(min=1e-10))
-                ).item()
-                
-                # Normalize by max entropy
-                max_entropy = np.log(len(attention_weights))
-                normalized = attention_entropy / max_entropy
-                
-                return float(normalized)
-            else:
-                return 0.5  # Default if attention not available
-                
-        except Exception as e:
-            print(f"Warning: Attention extraction failed: {e}")
-            return 0.5
+      self,
+      image: Image.Image,
+      question: str
+  ) -> float:
+      """
+      Measure dispersion of cross-modal attention weights
+      """
+      try:
+          messages = [
+              {
+                  "role": "user",
+                  "content": [
+                      {"type": "image", "image": image},
+                      {"type": "text", "text": question},
+                  ],
+              }
+          ]
+          
+          inputs = self.processor.apply_chat_template(
+              messages,
+              tokenize=True,
+              add_generation_prompt=True,
+              return_dict=True,
+              return_tensors="pt"
+          ).to(self.device)
+          
+          with torch.no_grad():
+              outputs = self.model(**inputs, output_attentions=True)
+          
+          # FIX: Vérifier si attentions existe et n'est pas None
+          if hasattr(outputs, 'attentions') and outputs.attentions is not None and len(outputs.attentions) > 0:
+              attention = outputs.attentions[-1]
+              
+              # Vérifier que attention n'est pas None
+              if attention is not None:
+                  # Average over heads and sequence
+                  attention_weights = attention.mean(dim=1).mean(dim=1)
+                  
+                  # Calculate entropy of attention distribution
+                  attention_weights = attention_weights.flatten()
+                  attention_probs = F.softmax(attention_weights, dim=-1)
+                  attention_entropy = -torch.sum(
+                      attention_probs * torch.log(attention_probs.clamp(min=1e-10))
+                  ).item()
+                  
+                  # Normalize by max entropy
+                  max_entropy = np.log(len(attention_weights))
+                  normalized = attention_entropy / max_entropy
+                  
+                  return float(normalized)
+          
+          # Default si attention non disponible
+          return 0.5
+                  
+      except Exception as e:
+          print(f"Warning: Attention extraction failed: {e}")
+          return 0.5
+
+
+
     
     def _compute_semantic_consistency(
         self,
@@ -215,15 +231,27 @@ class UncertaintyAnalyzer:
         responses = []
         
         try:
-            inputs = self.processor(
-                text=question,
-                images=image,
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": image},
+                        {"type": "text", "text": question},
+                    ],
+                }
+            ]
+            
+            inputs = self.processor.apply_chat_template(
+                messages,
+                tokenize=True,
+                add_generation_prompt=True,
+                return_dict=True,
                 return_tensors="pt"
             ).to(self.device)
             
             for _ in range(num_samples):
                 with torch.no_grad():
-                    outputs = self.model.generate(
+                    generated_ids = self.model.generate(
                         **inputs,
                         max_new_tokens=100,
                         do_sample=True,
@@ -231,10 +259,15 @@ class UncertaintyAnalyzer:
                         top_p=0.9
                     )
                 
-                response = self.processor.decode(
-                    outputs[0],
-                    skip_special_tokens=True
-                )
+                generated_ids_trimmed = [
+                    out_ids[len(in_ids):] 
+                    for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+                ]
+                response = self.processor.batch_decode(
+                    generated_ids_trimmed,
+                    skip_special_tokens=True,
+                    clean_up_tokenization_spaces=False
+                )[0]
                 responses.append(response)
             
             # Measure pairwise similarity
@@ -411,44 +444,58 @@ class VisualReAttention:
         Extract cross-modal attention as 2D heatmap
         """
         try:
-            inputs = self.processor(
-                text=question,
-                images=image,
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": image},
+                        {"type": "text", "text": question},
+                    ],
+                }
+            ]
+            
+            inputs = self.processor.apply_chat_template(
+                messages,
+                tokenize=True,
+                add_generation_prompt=True,
+                return_dict=True,
                 return_tensors="pt"
             ).to(self.device)
             
             with torch.no_grad():
                 outputs = self.model(**inputs, output_attentions=True)
             
-            if not hasattr(outputs, 'cross_attentions') or not outputs.cross_attentions:
+            if not hasattr(outputs, 'attentions') or not outputs.attentions:
                 return None
             
-            # Get last layer cross-attention
-            cross_attn = outputs.cross_attentions[-1]
-            # Shape: [batch, heads, text_seq, img_patches]
+            # Get last layer attention
+            attention = outputs.attentions[-1]
+            # Average over heads and tokens
+            attention_map = attention.mean(dim=1).squeeze()
             
-            # Average over heads and text tokens
-            attention_map = cross_attn.mean(dim=1).mean(dim=1).squeeze()
-            # Shape: [img_patches]
+            # For Qwen3-VL, we need to identify vision tokens
+            # This is a simplified approach - adjust based on actual architecture
+            if attention_map.dim() == 2:
+                attention_map = attention_map.mean(dim=0)
             
-            # Reshape to 2D
+            # Try to reshape to 2D spatial layout
             num_patches = attention_map.shape[0]
             grid_size = int(np.sqrt(num_patches))
             
-            if grid_size * grid_size != num_patches:
+            if grid_size * grid_size == num_patches:
+                attention_2d = attention_map.reshape(grid_size, grid_size)
+                
+                # Resize to image dimensions
+                attention_2d = torch.nn.functional.interpolate(
+                    attention_2d.unsqueeze(0).unsqueeze(0),
+                    size=(image.height, image.width),
+                    mode='bilinear',
+                    align_corners=False
+                ).squeeze()
+                
+                return attention_2d.cpu().numpy()
+            else:
                 return None
-            
-            attention_2d = attention_map.reshape(grid_size, grid_size)
-            
-            # Resize to image dimensions
-            attention_2d = torch.nn.functional.interpolate(
-                attention_2d.unsqueeze(0).unsqueeze(0),
-                size=(image.height, image.width),
-                mode='bilinear',
-                align_corners=False
-            ).squeeze()
-            
-            return attention_2d.cpu().numpy()
             
         except Exception as e:
             print(f"Warning: Attention extraction failed: {e}")
@@ -587,16 +634,18 @@ class SelfRefinementEngine:
     
     def __init__(
         self,
-        model_name: str = "llava-hf/llava-1.5-7b-hf",
+        model_name: str = "Qwen/Qwen2-VL-2B-Instruct",
         device: str = "cuda" if torch.cuda.is_available() else "cpu"
     ):
         print(f"Loading model: {model_name}")
         print(f"Device: {device}")
         
         self.device = device
-        self.model = LlavaForConditionalGeneration.from_pretrained(
+        
+        # Load Qwen2-VL model
+        self.model = Qwen2VLForConditionalGeneration.from_pretrained(
             model_name,
-            torch_dtype=torch.float16 if device == "cuda" else torch.float32,
+            torch_dtype=torch.bfloat16 if device == "cuda" else torch.float32,
             device_map="auto" if device == "cuda" else None
         )
         
@@ -617,7 +666,7 @@ class SelfRefinementEngine:
         image: Image.Image,
         question: str,
         max_iterations: int = 3,
-        uncertainty_threshold: float = 0.3,
+        uncertainty_threshold: float = 0.15,
         verbose: bool = True
     ) -> RefinementResult:
         """
@@ -764,29 +813,46 @@ class SelfRefinementEngine:
         question: str,
         max_new_tokens: int = 150
     ) -> str:
-        """Generate response from VLM"""
+        """Generate response from VLM using Qwen3-VL format"""
         try:
-            inputs = self.processor(
-                text=question,
-                images=image,
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": image},
+                        {"type": "text", "text": question},
+                    ],
+                }
+            ]
+            
+            inputs = self.processor.apply_chat_template(
+                messages,
+                tokenize=True,
+                add_generation_prompt=True,
+                return_dict=True,
                 return_tensors="pt"
             ).to(self.device)
             
             with torch.no_grad():
-                outputs = self.model.generate(
+                generated_ids = self.model.generate(
                     **inputs,
                     max_new_tokens=max_new_tokens,
                     do_sample=False,  # Greedy for consistency
                     temperature=1.0
                 )
             
-            response = self.processor.decode(outputs[0], skip_special_tokens=True)
+            generated_ids_trimmed = [
+                out_ids[len(in_ids):] 
+                for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+            ]
             
-            # Extract answer part (after question)
-            if question in response:
-                response = response.split(question)[-1].strip()
+            response = self.processor.batch_decode(
+                generated_ids_trimmed,
+                skip_special_tokens=True,
+                clean_up_tokenization_spaces=False
+            )[0]
             
-            return response
+            return response.strip()
             
         except Exception as e:
             print(f"Error generating response: {e}")
@@ -865,24 +931,28 @@ class SelfRefinementEngine:
         return original_response
 
 
-def main():
+
+def main_unique_image():
     """Example usage"""
+
+    image_path = "test_image.png"  # Replace with actual image path
+    image = Image.open(image_path)
     
-    # Initialize system
+    # Initialize system with Qwen3-VL
     engine = SelfRefinementEngine(
-        model_name="llava-hf/llava-1.5-7b-hf",
+        model_name="Qwen/Qwen2-VL-2B-Instruct",
         device="cuda" if torch.cuda.is_available() else "cpu"
     )
     
-    # Load test image
-    image = Image.new('RGB', (224, 224), color='white')  # Placeholder
-    question = "How many objects are in this image?"
     
-    # Run refinement
+    question = "How many cars are in this parking lot? Count carefully."
+    
+    # MODIFICATION: Seuil plus élevé pour forcer le raffinement
     result = engine.refine_response(
         image=image,
         question=question,
         max_iterations=3,
+        uncertainty_threshold=0.15,  # Changé de 0.3 à 0.15
         verbose=True
     )
     
@@ -897,5 +967,7 @@ def main():
     print("="*60)
 
 
+
 if __name__ == "__main__":
-    main()
+    main_unique_image()
+
