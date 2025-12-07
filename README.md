@@ -37,49 +37,21 @@ python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install dependencies
-pip install torch torchvision transformers pillow numpy matplotlib
-```
+pip install -r requirements.txt
 
-## Quick Start
-
-```python
-from utils.selfrefinementengine import SelfRefinementEngine
-from PIL import Image
-import torch
-
-# Initialize the refinement engine
-engine = SelfRefinementEngine(
-    model_name="Qwen/Qwen2-VL-7B-Instruct",
-    device="cuda" if torch.cuda.is_available() else "cpu"
-)
-
-# Load your image
-image = Image.open("path/to/your/image.jpg")
-question = "What objects are visible in this image?"
-
-# Run self-correction
-result = engine.refine_response(
-    image=image,
-    question=question,
-    max_iterations=3,
-    verbose=True
-)
-
-print(f"Final Response: {result.final_response}")
-print(f"Uncertainty: {result.final_uncertainty:.3f}")
+# Launch code (choose the right parameter and have necessary GPU before to launch)
+python self-refinement.py
 ```
 
 ## Project Structure
 
 ```
 .
-├── main.py                          # Main entry point and example usage
-├── graph_convergence.py             # Convergence analysis visualization
+├── self-refinement.py                          # Main entry point and example usage
 ├── utils/
-│   ├── selfrefinementengine.py     # Core self-refinement implementation
-│   ├── uncertaintymetrics.py       # Uncertainty quantification methods
-│   └── visualreattention.py        # Attention-guided cropping
+│   └── graph_convergence.py         # Convergence analysis visualization
 ├── figures/                         # Generated visualizations
+├── requirements.txt                 # requirements file
 └── main.tex                         # Research paper (LaTeX)
 ```
 
