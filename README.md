@@ -107,11 +107,11 @@ Our framework operates in three stages:
 If you use this work in your research, please cite:
 
 ```bibtex
-@article{sanogo2024selfcorrecting,
+@article{sanogo2025selfcorrecting,
   title={Towards Self-Correcting Vision-Language Models via Uncertainty-Guided Visual Re-Attention},
   author={Sanogo, Kassoum and Ardiccioni, Renzo},
   journal={arXiv preprint},
-  year={2024},
+  year={2025},
   institution={ESEO Engineering School and Le Mans Université}
 }
 ```
