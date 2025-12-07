@@ -11,11 +11,8 @@ License: MIT
 import torch
 import torch.nn.functional as F
 import numpy as np
-from transformers import (
-    Qwen2VLForConditionalGeneration,
-    AutoProcessor,
-    AutoTokenizer
-)
+from transformers import Qwen2_5_VLForConditionalGeneration, AutoTokenizer, AutoProcessor
+from qwen_vl_utils import process_vision_info
 from PIL import Image
 import json
 from typing import Dict, List, Tuple, Optional
@@ -473,7 +470,6 @@ class VisualReAttention:
             # Average over heads and tokens
             attention_map = attention.mean(dim=1).squeeze()
             
-            # For Qwen3-VL, we need to identify vision tokens
             # This is a simplified approach - adjust based on actual architecture
             if attention_map.dim() == 2:
                 attention_map = attention_map.mean(dim=0)
@@ -634,7 +630,7 @@ class SelfRefinementEngine:
     
     def __init__(
         self,
-        model_name: str = "Qwen/Qwen2-VL-2B-Instruct",
+        model_name: str = "Qwen/Qwen2.5-VL-7B-Instruct",
         device: str = "cuda" if torch.cuda.is_available() else "cpu"
     ):
         print(f"Loading model: {model_name}")
@@ -642,8 +638,8 @@ class SelfRefinementEngine:
         
         self.device = device
         
-        # Load Qwen2-VL model
-        self.model = Qwen2VLForConditionalGeneration.from_pretrained(
+        # Load Qwen2_5-VL model
+        self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             model_name,
             torch_dtype=torch.bfloat16 if device == "cuda" else torch.float32,
             device_map="auto" if device == "cuda" else None
@@ -813,7 +809,7 @@ class SelfRefinementEngine:
         question: str,
         max_new_tokens: int = 150
     ) -> str:
-        """Generate response from VLM using Qwen3-VL format"""
+        """Generate response from VLM using Qwen2_5-VL format"""
         try:
             messages = [
                 {
@@ -941,9 +937,9 @@ def main_unique_image():
     image_path = "test_image.png"  # Replace with actual image path
     image = Image.open(image_path)
     
-    # Initialize system with Qwen3-VL
+    # Initialize system with Qwen2_5-VL
     engine = SelfRefinementEngine(
-        model_name="Qwen/Qwen2-VL-2B-Instruct",
+        model_name="Qwen/Qwen2.5-VL-7B-Instruct",
         device="cuda" if torch.cuda.is_available() else "cpu"
     )
     
