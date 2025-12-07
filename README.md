@@ -6,7 +6,7 @@ A training-free framework for reducing hallucinations in Vision-Language Models 
 
 This repository implements a self-correction system that enables VLMs to identify and fix their own hallucinations without requiring additional training or external models. The approach combines multi-dimensional uncertainty quantification with attention-guided cropping to systematically re-examine under-explored image regions.
 
-![Framework Architecture](figures/framework_architecture.pdf)
+![Framework Architecture](figures/framework_architecture.png)
 
 ## Key Features
 
