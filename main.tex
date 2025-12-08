@@ -1,6 +1,7 @@
 \documentclass[12pt]{article}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
+\usepackage{pifont}
 \usepackage{hyperref}
 \usepackage{url}
 \usepackage{booktabs}
@@ -16,14 +17,16 @@
 \usepackage{natbib}
 \usepackage{multirow}
 \usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\graphicspath{ {./visualisations/} }
 
-% Pas de titre/auteur avec \maketitle, on les fait manuellement
 \begin{document}
 
 \noindent\rule{\textwidth}{6pt}
 \vspace{0.5em}
 \begin{center}
-{\LARGE\bfseries Towards Self-Correcting Vision-Language Models via Uncertainty-Guided Visual Re-Attention}
+{\Large\bfseries Toward More Reliable Artificial Intelligence: Reducing Hallucinations in Vision-Language Models}
+
 \end{center}
 \vspace{0.5em}
 \noindent\rule{\textwidth}{2pt}
@@ -53,30 +56,45 @@ Le Mans, France \\
 \end{center}
 \vspace{1em}
 
+\vspace{5em}
 \renewcommand{\abstractname}{\Large\bfseries Abstract}
 \begin{abstract}
 \vspace{1em}
 
-Vision-language models (VLMs) frequently generate hallucinated content plausible but incorrect claims about image content. We propose a training-free self-correction framework enabling VLMs to iteratively refine responses through uncertainty-guided visual re-attention. Our method combines multi-dimensional uncertainty quantification (token entropy, attention dispersion, semantic consistency, claim confidence) with attention-guided cropping of under-explored regions. Operating entirely with frozen, pretrained VLMs, our framework requires no gradient updates. We validate our approach on the POPE and MMHAL-BENCH benchmarks using the Qwen2.5-VL-7B architecture. Experimental results demonstrate that our method reduces hallucination rates by 9.8 percentage points compared to the baseline, while improving object existence accuracy by 4.7 points on adversarial splits. Furthermore, qualitative analysis confirms that uncertainty-guided re-attention successfully grounds corrections in visual evidence where standard decoding fails. We release our code and methodology to facilitate future research in trustworthy multimodal systems.
+Vision-language models (VLMs) frequently generate hallucinated content plausible but incorrect claims about image content. We propose a training-free self-correction framework enabling VLMs to iteratively refine responses through uncertainty-guided visual re-attention. Our method combines multi-dimensional uncertainty quantification (token entropy, attention dispersion, semantic consistency, claim confidence) with attention-guided cropping of under-explored regions. Operating entirely with frozen, pretrained VLMs, our framework requires no gradient updates. We validate our approach on the POPE and MMHAL-BENCH benchmarks using the Qwen2.5-VL-7B~\citep{qwen2.5-VL} architecture. Experimental results demonstrate that our method reduces hallucination rates by 9.8 percentage points compared to the baseline, while improving object existence accuracy by 4.7 points on adversarial splits. Furthermore, qualitative analysis confirms that uncertainty-guided re-attention successfully grounds corrections in visual evidence where standard decoding fails. We validate our approach on Qwen2.5-VL-7B~\citep{qwen2.5-VL}, with plans to extend validation across diverse architectures in future versions. We release our code and methodology to facilitate future research in trustworthy multimodal systems.
 
 \end{abstract}
 
+\vspace{3em}
+
 \section{Introduction}
 
-Vision-language models (VLMs)~\citep{liu2023llava, li2023blip2, alayrac2022flamingo, wang2024qwen25vl} have achieved remarkable capabilities in understanding and reasoning about visual content, enabling applications from image captioning to visual question answering. However, these models frequently generate \textit{hallucinated} content—plausible but factually incorrect claims about image content—which fundamentally undermines their reliability in critical applications such as medical image analysis, autonomous systems, and accessibility tools.
+Vision-language models (VLMs) such as LLava~\citep{liu2023llava}, Blip~\citep{li2023blip2}, flamingo~\citep{alayrac2022flamingo} and qwen2.5-VL-7B~\citep{qwen2.5-VL} have demonstrated exceptional capabilities in understanding and reasoning about visual content, enabling applications from image captioning to visual question answering. However, these models frequently generate \textit{hallucinated} content plausible but factually incorrect claims about image content which fundamentally undermines their reliability in critical applications such as medical image analysis, autonomous systems, and accessibility tools.
+
+\vspace{1em}
 
 The hallucination problem in VLMs manifests in several forms: claiming the presence of non-existent objects, misattributing visual properties, fabricating spatial relationships, and generating incorrect counts~\citep{rohrbach2018object, li2023pope}. While hallucinations can be partially addressed through better training data, architectural improvements, or post-hoc verification with external models~\citep{yin2023woodpecker}, these approaches either require substantial computational resources for retraining or introduce dependencies on additional specialized models.
 
-A compelling alternative paradigm is \textit{self-correction}—enabling VLMs to identify and rectify their own errors through structured iterative refinement~\citep{madaan2023selfrefine}. However, naive self-correction approaches that simply ask models to ``double-check'' their responses often fail~\citep{pan2024selfcorrection}, as models tend to defensively justify their initial outputs rather than critically reassess them. The key challenge is: \textit{how can we guide VLMs to productively re-examine visual content and correct hallucinations without external supervision?}
+\vspace{1em}
+
+A compelling alternative paradigm is \textit{self-correction} enabling VLMs to identify and rectify their own errors through structured iterative refinement~\citep{madaan2023selfrefine}. However, naive self-correction approaches that simply ask models to ``double-check'' their responses often fail~\citep{pan2024selfcorrection}, as models tend to defensively justify their initial outputs rather than critically reassess them. The key challenge is: \textit{how can we guide VLMs to productively re-examine visual content and correct hallucinations without external supervision?}
+
+\vspace{1em}
 
 We pose the following research question: \textbf{Can VLMs self-correct hallucinations through uncertainty-guided visual re-attention, systematically re-examining under-explored image regions that correspond to uncertain claims?}
 
-Our insight is that hallucinations often correlate with identifiable uncertainty patterns: high token-level entropy, dispersed attention, low semantic consistency across generations, and linguistic hedging. By quantifying these uncertainty signals and using them to guide targeted re-examination of specific image regions through attention-aware cropping and verification, we can enable effective self-correction without any training or external models.
+\vspace{1em}
+
+Our insight is that hallucinations often correlate with identifiable uncertainty patterns: high token-level entropy, dispersed attention, low semantic consistency across generations, and linguistic hedging. By quantifying these uncertainty signals and using them to guide targeted re-examination of specific image regions through attention-aware cropping and verification, we can enable effective self-correction without any training or external models. 
+
+\includegraphics[width=0.95\textwidth]{framework}
+
+illustrate this process on a real parking lot counting task, showing progressive uncertainty reduction from 0.52 to 0.27 and accuracy improvement from 12 to 21 cars.
 
 
 \subsection{Motivation}
 
-Existing approaches to hallucination mitigation in VLMs fall into three categories. \textit{Training-based methods}~\citep{sun2023aligning, lee2023rlaif} use reinforcement learning from human feedback (RLHF) or specialized datasets to reduce hallucination rates during model development, but require extensive computational resources and may not generalize to new domains. \textit{External verification methods}~\citep{yin2023woodpecker, leng2023mitigating} employ object detectors or knowledge bases to validate generated content, introducing dependencies on additional models and computational overhead. \textit{Decoding strategies}~\citep{liu2024lcd, chuang2023dola} modify the generation process through contrastive decoding or beam search variants, but operate without explicit understanding of where hallucinations occur.
+Existing approaches to hallucination mitigation in VLMs fall into three categories. \textit{Training-based methods}~\citep{sun2023aligning, lee2023rlaif} use reinforcement learning from human feedback (RLHF) or specialized datasets to reduce hallucination rates during model development, but require extensive computational resources and may not generalize to new domains. \textit{External verification methods}~\citep{yin2023woodpecker, leng2023mitigating} employ object detectors or knowledge bases to validate generated content, introducing dependencies on additional models and computational overhead. \textit{Decoding strategies}~\citep{liu2024lcd, chuang2023dola} modify the generation process through contrastive decoding or beam search variants, yet they operate without an explicit mechanism to localize where hallucinations originate.
 
 None of these approaches leverage the VLM's own uncertainty signals to guide selective, targeted re-examination of ambiguous visual content. We propose that VLMs possess latent self-correction capabilities that can be activated through uncertainty-guided visual re-attention, without modifying model parameters or requiring external supervision. \textbf{Our key insight is that uncertainty itself provides the roadmap for where and how to re-examine visual content.}
 
@@ -86,17 +104,25 @@ Our framework operates in three stages (illustrated in Figure~\ref{fig:framework
 
 \noindent\textbf{(1) Uncertainty Quantification:} For each generated response, we compute multi-dimensional uncertainty scores combining token entropy, attention dispersion, semantic consistency, and claim confidence markers to identify potentially hallucinated content.
 
+\vspace{1em}
+
 \noindent\textbf{(2) Attention-Guided Re-examination:} For high-uncertainty claims, we extract attention maps to identify under-examined image regions, generate multiple crops at different scales focusing on these regions, and prompt the VLM with targeted verification questions.
+
+\vspace{1em}
 
 \noindent\textbf{(3) Iterative Refinement:} We integrate verification results to produce refined responses, update uncertainty estimates, and repeat until convergence or a maximum number of iterations is reached.
 
-Crucially, our framework is \textit{training-free}—it operates entirely at inference time with frozen pretrained VLMs, requiring only access to attention weights and token probabilities (available in most modern VLM implementations such as Qwen2.5-VL~\citep{wang2024qwen25vl}). This enables immediate deployment with existing models without fine-tuning.
+\vspace{1em}
+
+Crucially, our framework is \textit{training-free}, it operates entirely at inference time with frozen pretrained VLMs, requiring only access to attention weights and token probabilities (available in most modern VLM implementations such as Qwen2.5-VL~\citep{wang2024qwen25vl}). This enables immediate deployment with existing models without fine-tuning.
+
+\vspace{1em}
 
 \textbf{Comparison with concurrent work:} Unlike recent self-correction frameworks that require additional training~\citep{ding2025sherlock, cheng2024r3v} or reinforcement learning~\citep{kumar2024training}, our approach operates entirely at inference time with frozen models. While Sherlock and R3V achieve impressive results through preference learning and reflection, they necessitate substantial computational resources for training. Our uncertainty-guided approach achieves competitive performance (4.7\% improvement on POPE-Adversarial) without any gradient updates, making it immediately deployable with existing pretrained VLMs.
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.95\textwidth]{figures/framework_architecture.pdf}
+\includegraphics[width=0.8\textwidth]{figures/framework_architecture.pdf}
 \caption{Overview of our uncertainty-guided self-correction framework. The system iteratively refines VLM responses through three main stages: (1) Multi-dimensional uncertainty quantification identifies potentially hallucinated claims, (2) Attention-guided visual re-examination generates targeted crops of under-explored regions, and (3) Iterative refinement integrates verification results until convergence or maximum iterations are reached.}
 \label{fig:framework}
 \end{figure}
@@ -110,18 +136,22 @@ This paper makes the following contributions:
 \begin{itemize}
 \item \textbf{First uncertainty-guided self-correction framework}: We propose a training-free self-correction approach for VLMs using uncertainty-guided visual re-attention, requiring neither external models nor additional training. This enables plug-and-play deployment with existing pretrained VLMs such as Qwen2.5-VL.
 
-\item \textbf{Multi-dimensional uncertainty quantification}: We develop a comprehensive uncertainty quantification methodology that unifies complementary signals—token-level entropy~\citep{gal2016dropout}, attention dispersion, semantic consistency, and linguistic confidence markers—to reliably detect potential hallucinations. The integration of these four orthogonal signals provides more robust hallucination detection than any single metric alone.
+\item \textbf{Multi-dimensional uncertainty quantification}: We develop a comprehensive uncertainty quantification methodology that unifies complementary signals token level entropy~\citep{gal2016dropout}, attention dispersion, semantic consistency, and linguistic confidence markers to reliably detect potential hallucinations. The integration of these four orthogonal signals provides more robust hallucination detection than any single metric alone.
 
 \item \textbf{Detailed algorithmic specifications}: We present algorithmic specifications for uncertainty-guided visual re-examination and iterative refinement, including multi-scale cropping strategies, saliency-based region identification, and structured verification protocols. These specifications enable straightforward implementation and reproducibility.
 
 \item \textbf{Theoretical foundations and empirical validation}: We provide theoretical analysis explaining why visual re-attention reduces hallucinations through attention redistribution effects, scale-dependent feature extraction, and Bayesian hypothesis testing paradigms. We validate our framework empirically on POPE and MMHAL-BENCH benchmarks using Qwen2.5-VL-7B, achieving 4.7 percentage point improvements on adversarial splits and 9.8 percentage point reductions in hallucination rates.
 \end{itemize}
 
+This work serves to demonstrate the viability of uncertainty-guided re-attention on the Qwen2.5-VL-7B architecture. Future work will validate generalization across diverse VLM architectures including LLaVA, Flamingo, and other open source models to establish broader applicability of our approach.
+
 \section{Related Work}
 
 \subsection{Hallucinations in Vision-Language Models}
 
-Vision-language hallucinations have been extensively studied across various tasks and model architectures. Early work by Rohrbach et al.~\citep{rohrbach2018object} identified object hallucinations in image captioning systems, while more recent studies have characterized hallucinations in visual question answering (VQA), image-text retrieval, and multimodal reasoning. Li et al.~\citep{li2023pope} introduced POPE (Polling-based Object Probing Evaluation) as a systematic benchmark for evaluating object existence hallucinations, revealing that even state-of-the-art VLMs exhibit substantial false positive rates—a pattern that motivates our work.
+Vision-language hallucinations have been extensively studied across various tasks and model architectures. Early work by Rohrbach et al.~\citep{rohrbach2018object} identified object hallucinations in image captioning systems, while more recent studies have characterized hallucinations in visual question answering (VQA), image-text retrieval, and multimodal reasoning. Li et al.~\citep{li2023pope} introduced POPE (Polling-based Object Probing Evaluation) as a systematic benchmark for evaluating object existence hallucinations, revealing that even state-of-the-art VLMs exhibit substantial false positive rates a pattern that motivates our work.
+
+\vspace{1em}
 
 Hallucinations are commonly categorized into two types: \textit{perceptual hallucinations} (claims about visual content that is not present in the image) and \textit{semantic hallucinations} (incorrect relationships, attributes, or interpretations of visible content). This distinction is important because different mitigation strategies may be more effective for different hallucination types. Understanding these failure modes is critical for designing effective mitigation strategies that improve VLM reliability in safety-critical applications.
 
@@ -130,9 +160,13 @@ Hallucinations are commonly categorized into two types: \textit{perceptual hallu
 
 \textbf{Training-based methods} aim to reduce hallucinations during model development. Sun et al.~\citep{sun2023aligning} employ RLHF to penalize hallucinated outputs, while Yu et al.~\citep{yu2023hallucination} introduce specialized datasets with negative examples. These approaches require substantial computational resources and may not generalize to domains underrepresented in training data.
 
-Recent work has also explored post-hoc correction methods. REVERSE~\citep{chen2024reverse} implements a training-free hallucination reversal approach achieving significant improvements on LLaVA-1.5-7B. NoLan~\citep{nolan2024} proposes a novel decoding strategy that mitigates object hallucinations through negative sample learning. HIO~\citep{hio2024} introduces hallucination-aware optimization techniques. LCD~\citep{liu2024lcd} employs contrastive decoding to reduce hallucinations. Our work differs by focusing on uncertainty-guided visual re-attention as the primary correction mechanism.
+Recent work has also explored post-hoc correction methods. REVERSE~\citep{chen2024reverse} implements a training-free hallucination reversal approach achieving significant improvements on LLaVA-1.5-7B. NoLan~\citep{zhang2024nolan} proposes a novel decoding strategy that mitigates object hallucinations through negative sample learning. HIO~\citep{hio2024} introduces hallucination-aware optimization techniques. LCD~\citep{liu2024lcd} employs contrastive decoding to reduce hallucinations. Our work differs by focusing on uncertainty-guided visual re-attention as the primary correction mechanism.
+
+\vspace{1em}
 
 \textbf{External verification approaches} use additional models to validate generated content. Woodpecker~\citep{yin2023woodpecker} employs object detectors and bounding box extractors to verify claims, achieving strong performance but requiring multiple specialized models. VCD (Visual Contrastive Decoding)~\citep{leng2023mitigating} contrasts outputs from models with and without visual input to identify hallucinations. These methods introduce architectural dependencies and computational overhead.
+
+\vspace{1em}
 
 \textbf{Decoding strategies} modify the generation process without changing model weights. Liu et al.~\citep{liu2024lcd} propose contrastive decoding between image-conditioned and image-free outputs. Chuang et al.~\citep{chuang2023dola} introduce DoLa (Dynamic Decoding from Layerwise Differences), which contrasts predictions from different layers. While effective, these approaches do not explicitly model where hallucinations occur or guide targeted re-examination.
 
@@ -256,7 +290,7 @@ We integrate verification results and refine the original response:
 \end{algorithmic}
 \end{algorithm}
 
-The integration step employs rule-based logic: if verification contradicts the original claim with high confidence, the claim is removed or modified; if verification provides additional detail, it is incorporated; if verification is ambiguous, uncertainty markers are added.
+The integration step employs rule based logic: if verification contradicts the original claim with high confidence, the claim is removed or modified; if verification provides additional detail, it is incorporated; if verification is ambiguous, uncertainty markers are added.
 
 \subsection{Theoretical Foundations}
 
@@ -264,25 +298,35 @@ We provide theoretical justification for why uncertainty-guided visual re-attent
 
 \subsubsection{Attention Redistribution Hypothesis}
 
-\textbf{Problem}: Standard VLM inference processes entire images at fixed resolution with limited computational budget per region. When attention is dispersed across the image, models may fail to allocate sufficient resources to examine all regions thoroughly, leading to under-explored areas where hallucinations can occur unchecked.
+\textbf{Problem}: Standard VLM inference processes entire images at fixed resolution with limited computational budget per region. When attention is dispersed across the image, models may fail to allocate sufficient resources to examine all regions thoroughly, leading to under explored areas where hallucinations can occur unchecked.
+
+\vspace{1em}
 
 \textbf{Mechanism}: By strategically cropping and magnifying under-attended regions, we effectively reallocate the model's computational budget to focus on these previously under-examined areas. This forced redistribution of attention allows the model to discover visual evidence that was present but insufficiently processed in the original full-image pass.
+
+\vspace{1em}
 
 \textbf{Hypothesis}: Let \(A: \mathcal{R} \to [0,1]\) denote the attention distribution over visual regions during standard inference, and \(A': \mathcal{R}_{\text{crop}} \to [0,1]\) denote the attention distribution when processing a magnified crop. For a region \(r\) satisfying \(A(r) < \theta_{\text{attn}}\) (under-attended), processing a crop centered on \(r\) yields \(A'(r) > A(r)\), increasing the probability of detecting objects: 
 \[P(\text{detect}(o_r) | I_{\text{crop}}) > P(\text{detect}(o_r) | I_{\text{full}})\]
 where \(o_r\) denotes objects in region \(r\), \(I_{\text{crop}}\) is the magnified crop, and \(I_{\text{full}}\) is the original image.
 
-This explains why uncertainty-guided cropping—which targets specifically under-attended regions—is more effective than random refinement or uniform re-examination.
+This explains why uncertainty-guided cropping which targets specifically under-attended regions is more effective than random refinement or uniform re-examination.
 
 \subsubsection{Scale-Dependent Feature Extraction}
 
 \textbf{Problem}: Vision Transformers and CNN-based visual encoders extract features at different spatial scales, with an implicit trade-off between field-of-view and resolution. Processing a full image requires maintaining a large receptive field, which may limit the effective resolution available for small or distant objects.
 
+\vspace{1em}
+
 \textbf{Mechanism}: Cropping and magnifying specific regions effectively increases the relative resolution at which visual features are extracted, enabling the detection of small objects and fine details that are below the discrimination threshold in full-image processing.
+
+\vspace{1em}
 
 \textbf{Hypothesis}: For small objects \(o\) with pixel area \(A(o) < \theta_{\text{small}}\), the detection probability under full-image processing is strictly lower than under high-magnification cropping:
 \[P(\text{detect}(o) | I_{\text{full}}) < P(\text{detect}(o) | I_{\text{crop}})\]
 where \(I_{\text{crop}}\) is a crop containing \(o\) at magnification factor \(\mu > 1\). The magnification increases effective resolution proportional to \(\mu\), enabling feature discrimination below the full-image threshold.
+
+\vspace{1em}
 
 This mechanism particularly explains our strong improvements on object attribute descriptions and counting tasks (12.2-12.3 percentage points on MMHAL-BENCH), where fine visual details are critical for correct classification.
 
@@ -290,12 +334,18 @@ This mechanism particularly explains our strong improvements on object attribute
 
 \textbf{Framework}: Self-correction can be formalized as Bayesian inference: the initial VLM response encodes a prior belief over possible claims, verification questions provide targeted evidence, and iterative refinement updates posterior beliefs based on this evidence.
 
-\textbf{Mechanism}: Each verification question \(q_{\text{verify}}\) is designed to test a specific hypothesis \(H\) from the initial response. The VLM's response to this verification question provides evidence \(E\) that either supports or contradicts \(H\). By iteratively collecting evidence and updating beliefs, we progressively refine the posterior distribution over plausible responses.
+\vspace{1em}
 
-\textbf{Hypothesis}: Let \(H\) denote a claim in the initial response and \(E\) denote empirical evidence gathered from verification crops. If the evidence is inconsistent with the claim—formally, if \(P(E|H) < P(E|\neg H)\)—then Bayesian updating should reduce confidence in \(H\):
+\textbf{Mechanism}: Each verification question \(q_{\text{verify}}\) is designed to test a specific hypothesis \(H\) from the initial response. The VLMs response to this verification question provides evidence \(E\) that either supports or contradicts \(H\). By iteratively collecting evidence and updating beliefs, we progressively refine the posterior distribution over plausible responses.
+
+\vspace{1em}
+
+\textbf{Hypothesis}: Let \(H\) denote a claim in the initial response and \(E\) denote empirical evidence gathered from verification crops. If the evidence is inconsistent with the claim formally, if \(P(E|H) < P(E|\neg H)\) then Bayesian updating should reduce confidence in \(H\):
 \[\underbrace{P(H | E)}_{\text{posterior}} = \frac{P(E|H) P(H)}{P(E)} < P(H) = \underbrace{P(H | E_{\emptyset})}_{\text{prior}}\]
 
 Consequently, refinement should either remove the claim entirely or add uncertainty markers (e.g., "may" instead of "is"), converting overconfident hallucinations into appropriately hedged or removed statements. This explains why our method reduces hallucination rates by 9.8 percentage points on MMHAL-BENCH while maintaining overall response quality.
+
+\vspace{1em}
 
 \textbf{Connection to empirical results}: The effectiveness of uncertainty-guided selection of which claims to verify is crucial because randomly verifying claims (ablation: -3.4\% accuracy) provides uninformative evidence that can even reinforce hallucinations. Our uncertainty quantification directly identifies claims where evidence is most likely to be informative, thereby maximizing the efficiency of the iterative refinement process.
 
@@ -343,6 +393,9 @@ Table \ref{tab:pope_results} presents the performance comparison between the bas
 \end{table}
 
 Our method achieves a significant improvement of \textbf{+4.7\%} accuracy on the Adversarial split. This confirms that visually grounding the model through re-attention effectively mitigates the model's tendency to rely on object co-occurrence priors rather than actual visual evidence.
+
+
+
 
 \subsubsection{Open-Ended Hallucination Rates}
 
@@ -415,7 +468,7 @@ cumulative convergence rates:
 
 These convergence rates validate that $T=3$ is a reasonable maximum iteration limit: 
 most samples converge before this limit, while a small fraction (18\%) benefit from 
-additional iterations. This supports the hyperparameter choice in Section~\ref{sec:setup}.
+additional iterations. This supports the hyperparameter choice in Section 4.1
 
 \subsubsection{Accuracy Improvement Trajectory}
 
@@ -463,7 +516,7 @@ partitions samples into three categories: (i) easily-correctable (35\% by iter 1
 \textbf{Predictable computational budget}: The predictable convergence curve allows 
 for adaptive iteration strategies. In practice, sampling techniques (e.g., early 
 stopping at iter 1 for high-confidence corrections, iter 2 for moderate, iter 3 
-for difficult cases) could reduce the 12× computational overhead while maintaining 
+for difficult cases) could reduce the 5× computational overhead while maintaining 
 accuracy gains for high-confidence samples.
 
 
@@ -558,7 +611,7 @@ cannot be ruled out'') is far preferable to a confident misdiagnosis.}
 \textbf{Key insight}: Many hallucinations are not purely fabrications but rather 
 overconfident predictions made when visual evidence is ambiguous. Our uncertainty-guided 
 framework leverages this by providing evidence and allowing the model to update 
-its confidence—a more psychologically plausible correction mechanism than demanding 
+its confidence, a more psychologically plausible correction mechanism than demanding 
 a definitive reversal.
 
 \subsection{Failure Cases and Limitations}
@@ -579,7 +632,7 @@ may not be detected if the model's initial attention is concentrated on a centra
 object. The attention map provides no signal about the peripheral region, making 
 it impossible to generate targeted crops.
 
-\textbf{Impact on results}: This limitation particularly affects the Relation 
+\textbf{Impact on results}: This limitation particularly affects the relation 
 hallucination category (Table 2 ablation: smaller improvements vs. Attributes). 
 Spatial relationships between objects often require distributed attention, which 
 our method assumes is present.
@@ -660,30 +713,50 @@ However, we acknowledge that external verification methods \citep{yin2023woodpec
 
 \subsection{Computational Trade-offs}
 
-Each refinement iteration requires multiple forward passes. For $T=3$ and $K=2$, this translates to approximately $12\times$ computational cost compared to direct generation (1 initial + 5 semantic samples + $3 \times 2$ verification crops). On an A100 GPU, baseline inference takes $\approx 1$ second per sample, while our framework requires $\approx 12$ seconds.
-
-This computational budget is:
-\begin{itemize}
-\item \textbf{Acceptable for:} Medical imaging analysis, legal document processing, scientific figure interpretation (accuracy-critical applications)
-\item \textbf{Unsuitable for:} Real-time interactive systems, high-throughput processing (latency-critical applications)
-\end{itemize}
+Each refinement iteration requires multiple forward passes. For $T=2$ and $K=2$, this translates to approximately $8\times$ computational cost compared to direct generation (1 initial + 3 semantic samples + $2 \times 2$ verification crops). On an A100 GPU, baseline inference takes $\approx 3$ second per sample, while our framework requires $\approx 8$ seconds.
 
 Future work can optimize this through batch processing, adaptive iteration counts, and KV-cache reuse.
 
+\subsection{Limitations and Scope}
+
+While our framework demonstrates significant improvements in hallucination mitigation, we acknowledge several important limitations that define the scope of our contribution:
+
+\vspace{1em}
+
+\textbf{(1) Computational Cost:} The 8× computational overhead (8 seconds vs 3 second per sample on A100 GPU) limits applicability to real-time interactive systems. This trade-off is acceptable for accuracy-critical applications such as medical image analysis, legal document processing, and scientific figure interpretation, but unsuitable for latency-sensitive deployments. Future optimizations through batch processing, adaptive iteration strategies, and KV-cache reuse could reduce this overhead while maintaining accuracy gains.
+
+\vspace{1em}
+
+\textbf{(2) Single Architecture Evaluation:} Our empirical validation focuses exclusively on Qwen2.5-VL-7B. While we provide theoretical foundations suggesting the approach should generalize to other VLM architectures with accessible attention weights and token probabilities, this generalization requires empirical validation. Different architectures may exhibit varying attention patterns, uncertainty characteristics, and optimal hyperparameter configurations. Validating cross-architecture generalization remains critical future work.
+
+\vspace{1em}
+
+\textbf{(3) Semantic Hallucination Limitations:} Our method achieves modest improvements 
+(5.4 percentage points) on semantic hallucinations compared to substantial gains (12.2 points) on perceptual hallucinations. This asymmetry reveals that visual re-attention alone is insufficient for hallucinations involving high-level reasoning, action inference, or world knowledge errors. These failure modes require complementary approaches such as external knowledge integration or specialized reasoning modules.
+
+\vspace{1em}
+
+\textbf{(4) Hyperparameter Sensitivity:} Our framework requires tuning of uncertainty thresholds ($\tau_u$, $\tau_{attn}$) and aggregation weights ($\alpha_i$). While we provide recommended values based on theoretical analysis and validation on Qwen2.5-VL-7B, optimal configurations may vary across models, domains, and tasks. Automated hyperparameter optimization or adaptive threshold selection could improve robustness.
+
+\vspace{1em}
+
+\textbf{(5) Attention-Based Failure Modes:} When the initial attention distribution provides uninformative guidance (e.g., uniform attention or focus on irrelevant regions), our saliency-based region identification may miss target objects. Alternative cropping strategies guided by textual claims or object detection priors could mitigate this limitation.
+
+\vspace{1em}
+
+Despite these limitations, our work establishes the viability of uncertainty-guided visual re-attention as a training-free hallucination mitigation strategy and provides a foundation for future research in self-correcting multimodal systems.
+
 \section{Conclusion}
 
-We presented a training-free, uncertainty-guided self-correction framework for vision-language models. By combining multi-dimensional uncertainty quantification with strategic re-examination of under-explored image regions, our method achieves significant hallucination reduction and accuracy improvements on established benchmarks without requiring external models or additional training.
+We introduced a training-free, uncertainty-guided self-correction framework for vision-language models. By combining multi-dimensional uncertainty quantification with strategic re-examination of under-explored image regions, our method achieves significant hallucination reduction and accuracy improvements on established benchmarks without requiring external models or additional training.
 
-Our empirical results on POPE and MMHAL-BENCH confirm that VLMs contain latent self-correction capabilities that can be unlocked without external supervision. The \textbf{4.7\%} improvement in adversarial robustness demonstrates the practical effectiveness of uncertainty-guided visual re-attention. While computational cost remains a trade-off, the significant gain in reliability makes this approach a viable solution for safety-critical applications.
+Our empirical results on POPE and MMHAL-BENCH confirm that VLMs contain latent self-correction capabilities that can be unlocked without external supervision. The \textbf{4.7\%} improvement in adversarial accuracy (from \textbf{75.9\%} to \textbf{80.6\%}) demonstrates the practical effectiveness of uncertainty-guided visual re-attention. While computational cost remains a trade-off, the significant gain in reliability makes this approach a viable solution for safety-critical applications.
 
-Our empirical results on POPE and MMHAL-BENCH confirm that VLMs contain latent
-self-correction capabilities that can be unlocked without external supervision. The 
-\textbf{4.7\%} improvement in adversarial accuracy (from \textbf{75.9\%} to \textbf{80.6\%}) demonstrates the practical effectiveness of uncertainty-guided visual re-attention. While computational cost remains a trade-off, the significant gain in reliability makes this approach a viable solution for safety-critical applications.
-
-
-Future work will focus on: (1) optimizing iteration efficiency through adaptive stopping criteria, (2) extending the approach to video domains with temporal consistency, (3) integrating text-guided cropping strategies for semantic hallucinations, and (4) systematic benchmarking across diverse VLM architectures.
+Future work will focus on: (1) validating generalization across diverse VLM architectures (LLaVA, Flamingo, GPT-4V) to establish broader applicability, (2) optimizing iteration efficiency through adaptive stopping criteria and batch processing to reduce the 8× computational overhead, (3) extending the approach to video domains with temporal consistency constraints, (4) integrating text-guided cropping strategies and external knowledge bases to address semantic hallucinations, and (5) developing automated hyperparameter optimization methods for improved cross-domain robustness.
 
 We release our code, implementation guidelines, and experimental data to facilitate future research in trustworthy multimodal systems and AI self-correction.
+
+
 
 \section*{Reproducibility Statement}
 

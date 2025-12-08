@@ -1,4 +1,4 @@
-# Self-Correcting Vision-Language Models via Uncertainty-Guided Visual Re-Attention
+# Toward More Reliable Artificial Intelligence: Reducing Hallucinations in Vision-Language Models
 
 A training-free framework for reducing hallucinations in Vision-Language Models (VLMs) through iterative uncertainty-guided visual re-examination.
 
@@ -80,7 +80,7 @@ If you use this work in your research, please cite:
 
 ```bibtex
 @article{sanogo2025selfcorrecting,
-  title={Towards Self-Correcting Vision-Language Models via Uncertainty-Guided Visual Re-Attention},
+  title={Toward More Reliable Artificial Intelligence: Reducing Hallucinations in Vision-Language Models},
   author={Sanogo, Kassoum and Ardiccioni, Renzo},
   journal={arXiv preprint},
   year={2025},
