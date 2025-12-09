@@ -79,12 +79,14 @@ Our framework operates in three stages:
 If you use this work in your research, please cite:
 
 ```bibtex
-@article{sanogo2025selfcorrecting,
-  title={Toward More Reliable Artificial Intelligence: Reducing Hallucinations in Vision-Language Models},
-  author={Sanogo, Kassoum and Ardiccioni, Renzo},
-  journal={arXiv preprint},
-  year={2025},
-  institution={ESEO Engineering School and Le Mans Université}
+@misc{sanogo2025reliableartificialintelligencereducing,
+      title={Toward More Reliable Artificial Intelligence: Reducing Hallucinations in Vision-Language Models},
+      author={Kassoum Sanogo and Renzo Ardiccioni},
+      year={2025},
+      eprint={2512.07564},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2512.07564},
 }
 ```
 
