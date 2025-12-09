@@ -4,7 +4,7 @@ Self-Correcting Vision-Language Models via Uncertainty-Guided Visual Re-Attentio
 Main implementation of the self-refinement system for reducing hallucinations
 in open-source VLMs through iterative uncertainty-guided verification.
 
-Author: Research Implementation
+Author: Kassoum Sanogo
 License: MIT
 """
 
